@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+
+# Environment variables (SENSITIVE)
+.env
+.env.local
+
+# Project specific outputs
+outputs/
+md2pptx/outputs/
+!md2pptx/outputs/.gitkeep
+
+# Cache
+md2pptx/outputs/.cache/
