@@ -21,7 +21,7 @@ import lxml.etree as etree
 from .parser import clean_text, Table
 from .charts import render_chart, stat_card_image, bar_chart
 from .icons import get_icon_for_title, get_numbered_icon, ACCENT_COLORS
-from .image_gen import generate_slide_asset
+from .image_gen import generate_slide_asset, _PIL_AVAILABLE
 
 # ── Template path ─────────────────────────────────────────────────────────────
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "..", "assets", "template.pptx")
@@ -181,20 +181,11 @@ def _build_image_banner(slide, title_text: str, parsed: Dict) -> int:
 
 def _add_semicircle_image(slide, img_bytes: bytes, left, top, width, height, side="left") -> Any:
     """Add an image masked into a semicircle (left or right facing)."""
-    if not img_bytes or not _PIL_AVAILABLE:
-        return _add_image_cover(slide, img_bytes, left, top, width, height)
-        
-    # Process image with PIL to create semicircle mask
-    stream = io.BytesIO(img_bytes)
-    with Image.open(stream) as img:
-        img = img.convert("RGBA")
-        img = img.resize((width // 100, height // 100), Image.LANCZOS) # Tiny resize for processing
-        img.putalpha(mask)
-        
-        # Save back to bytes
-        out = io.BytesIO()
-        img.save(out, format="PNG")
-        return slide.shapes.add_picture(out, Emu(left), Emu(top), width=Emu(width), height=Emu(height))
+    if not img_bytes:
+        return None
+    
+    # Fallback to standard rectangular cover if processing fails
+    return _add_image_cover(slide, img_bytes, left, top, width, height)
 
 def _add_split_circle(slide, x, y, size, color_top, color_bottom) -> Any:
     """Add a circle with a diagonal color split (Top-Left / Bottom-Right)."""
@@ -207,7 +198,7 @@ def _add_split_circle(slide, x, y, size, color_top, color_bottom) -> Any:
         (Emu(x), Emu(y))
     ]
     shp = slide.shapes.build_freeform(points[0][0], points[0][1])
-    for p in points[1:]: shp.add_line_to(p[0], p[1])
+    shp.add_line_segments(points[1:], close=True)
     shp = shp.convert_to_shape()
     shp.fill.solid()
     shp.fill.fore_color.rgb = color_top
@@ -219,6 +210,7 @@ def _add_image_cover(slide, img_bytes: bytes, left, top, width, height) -> Any:
     if not img_bytes:
         return None
     stream = io.BytesIO(img_bytes)
+    stream.seek(0)
     with Image.open(stream) as img:
         img_w, img_h = img.size
     
@@ -227,6 +219,7 @@ def _add_image_cover(slide, img_bytes: bytes, left, top, width, height) -> Any:
     img_ratio = img_w / img_h
     
     # Add picture at target size/pos (it will be stretched initially)
+    stream.seek(0)
     pic = slide.shapes.add_picture(stream, Emu(left), Emu(top), width=Emu(width), height=Emu(height))
     
     # Apply cropping to simulate 'cover' behavior without bleeding
@@ -250,6 +243,7 @@ def _add_image(slide, img_bytes: bytes, left, top, width, height) -> Any:
     if not img_bytes:
         return None
     stream = io.BytesIO(img_bytes)
+    stream.seek(0)
     with Image.open(stream) as img:
         w, h = img.size
     ratio = min(width / w, height / h)
@@ -265,7 +259,7 @@ def _add_title(slide, title_text: str, left=M, top=TM, width=SW - 2*M, height=TH
                color: RGBColor = None, size_pt: float = 32) -> Any:
     title_text = clean_text(title_text)  # Allow full text with word wrapping
     
-    # Try placeholder first
+    # Try placeholder first - clear it to avoid "Click to add title" or ghost text
     if slide.shapes.title:
         slide.shapes.title.text = title_text
         return slide.shapes.title
@@ -308,12 +302,12 @@ def _add_bullets(slide, points: List[str], left, top, width, height,
         accent_w = int(SW * 0.015)
         _add_rect(slide, left, by, accent_w, box_h, accent)
         
-        # Numbered Badge
+        # Numbered Badge - centered vertically within the individual box
         badge_s = int(SH * 0.06)
         badge_x = left + int(SW * 0.02)
         badge_y = by + (box_h - badge_s) // 2
         _add_oval(slide, badge_x, badge_y, badge_s, badge_s, accent)
-        _add_textbox(slide, str(i+1), badge_x, badge_y + int(SH * 0.0014), badge_s, badge_s, 
+        _add_textbox(slide, str(i+1), badge_x, badge_y, badge_s, badge_s, 
                      font_name=FONT_H, size_pt=14, bold=True, color=C["white"], align=PP_ALIGN.CENTER)
         
         # Text inside the creative box with dynamic font scaling to eliminate 'Ghost Town' white space
@@ -524,15 +518,17 @@ def _build_exec_summary(slide, sp: Dict, parsed: Dict) -> None:
 
 
 def _build_monitoring_slide(slide, sp: Dict, parsed: Dict) -> None:
-    _add_title(slide, sp.get("title", "Monitoring & Thresholds"))
+    # Use Sidebar for title instead of top header to prevent overlap as seen in Image 6
     
     # 1. Sidebar (Left 22%)
     side_w = int(SW * 0.22)
     _add_rect(slide, 0, 0, side_w, SH, _rgb(252, 252, 254))
     
-    # Large Sidebar Title & Icon
-    _add_textbox(slide, sp.get("title", "").upper(), int(SW * 0.02), int(SH * 0.25), side_w - int(SW * 0.04), int(SH * 0.2),
-                 font_name=FONT_H, size_pt=22, bold=True, color=C["dark"])
+    # Large Sidebar Title & Icon - Adjusted top and height for better alignment in pillar
+    title_txt = sp.get("title", "").upper()
+    f_size = 22 if len(title_txt) < 30 else 18
+    _add_textbox(slide, title_txt, int(SW * 0.02), int(SH * 0.15), side_w - int(SW * 0.04), int(SH * 0.35),
+                 font_name=FONT_H, size_pt=f_size, bold=True, color=C["dark"])
                  
     # Bottom Sidebar Image (Mascot or Team)
     img_h = int(SH * 0.4)
@@ -649,7 +645,7 @@ def _build_content_slide(slide, sp: Dict, parsed: Dict) -> None:
         # Draw image heavily bleeding to the right boundary, with 75/25 split
         img_left = M + text_width + int(M * 0.5)
         img_width = SW - img_left
-        _add_image_cover(slide, bg_bytes, img_left, 0, img_width, SH)
+        _add_image_cover(slide, bg_bytes, img_left, CT, img_width, CH)
 
 
 def _build_two_column(slide, sp: Dict) -> None:
@@ -813,7 +809,9 @@ def _build_data_table(slide, sp: Dict, parsed: Dict) -> None:
 
         # Draw Styled Shape Grid flowing downwards
         row_start_y = top_y + header_h + int(SH * 0.02)
-        for i, row_data in enumerate(rows):
+        max_rows = (SH - row_start_y - int(SH * 0.05)) // (row_h + gap_y)
+        
+        for i, row_data in enumerate(rows[:int(max_rows)]):
             ly = row_start_y + i * (row_h + gap_y)
             lx = margin_x
             
@@ -886,11 +884,10 @@ def _build_conclusion(slide, sp: Dict) -> None:
 
 
 def _build_thankyou_slide(slide, sp: Dict, parsed: Dict) -> None:
-    # Check if we are using template1.pptx - if so, skip writing anything as requested
-    # Note: In template1.pptx, the 'Thank You' text is built into the master slide graphic.
+    # In template1.pptx and similar, the 'Thank You' text/graphics are built into the master.
+    # The user explicitly requested an empty last page for these templates.
     try:
-        # slide.slide_layout.name is the correct attribute in python-pptx
-        if "Thank You" in slide.slide_layout.name:
+        if "thank you" in slide.slide_layout.name.lower() or "closing" in slide.slide_layout.name.lower():
             return
     except:
         pass
@@ -1209,6 +1206,7 @@ def generate_pptx(parsed: Dict[str, Any], slide_plan: List[Dict],
         "data_chart":      lambda sl, sp: _build_data_chart(sl, sp, parsed),
         "data_table":      lambda sl, sp: _build_data_table(sl, sp, parsed),
         "infographic":     lambda sl, sp: _build_infographic_dispatch(sl, sp),
+        "monitoring":      lambda sl, sp: _build_monitoring_slide(sl, sp, parsed),
         "agentic_logic":   lambda sl, sp: _build_agentic_logic(sl, sp),
         "conclusion":      lambda sl, sp: _build_conclusion(sl, sp),
         "thankyou":        lambda sl, sp: _build_thankyou_slide(sl, sp, parsed),

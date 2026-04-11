@@ -121,20 +121,25 @@ def generate_slide_asset(title: str, doc_title: str, is_mascot: bool = False) ->
     cache_path = os.path.join(_get_cache_dir(), f"{cache_id}.jpg")
 
     if os.path.exists(cache_path):
-        with open(cache_path, "rb") as f: return f.read()
+        with open(cache_path, "rb") as f:
+            data = f.read()
+        if data and len(data) > 512:  # sanity check: valid image
+            return data
+        else:
+            os.remove(cache_path)  # purge corrupt cache
 
     # 1. Try Unsplash (Skip for mascots as AI art is better for custom 3D characters)
     if not is_mascot and os.getenv("UNSPLASH_ACCESS_KEY"):
         print(f"   [Unsplash] Fetching asset for: {title[:30]}...")
         img_bytes = _get_unsplash_image(search_keywords)
-        if img_bytes:
+        if img_bytes and len(img_bytes) > 512:
             with open(cache_path, "wb") as f: f.write(img_bytes)
             return img_bytes
 
     # 2. Try Pollinations AI Art
     print(f"   [Pollinations] Generating {'Mascot' if is_mascot else 'AI art'} for: {title[:30]}...")
     img_bytes = _get_pollinations_image(ai_prompt)
-    if img_bytes:
+    if img_bytes and len(img_bytes) > 512:
         with open(cache_path, "wb") as f: f.write(img_bytes)
         return img_bytes
 

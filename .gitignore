@@ -17,6 +17,8 @@ env/
 .env
 .env.local
 
-# Project specific outputs (root level only)
-/outputs/
+# Project specific outputs
+# md2pptx/outputs/  <-- Explicitly allowed per user request
 # Cache
+.cache/
+**/outputs/.cache/
