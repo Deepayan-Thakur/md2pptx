@@ -19,8 +19,4 @@ env/
 
 # Project specific outputs
 outputs/
-md2pptx/outputs/
-!md2pptx/outputs/.gitkeep
-
 # Cache
-md2pptx/outputs/.cache/
