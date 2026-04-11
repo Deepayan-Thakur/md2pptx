@@ -17,6 +17,6 @@ env/
 .env
 .env.local
 
-# Project specific outputs
-outputs/
+# Project specific outputs (root level only)
+/outputs/
 # Cache
