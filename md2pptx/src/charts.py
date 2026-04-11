@@ -207,6 +207,26 @@ def stat_card_image(stats: List[Tuple[str, str, str]],
     return _to_bytes(fig)
 
 
+def area_chart(labels: List[str], values, ylabel: str = "",
+               chart_title: str = "") -> bytes:
+    """Filled line chart."""
+    values = _parse_values(values)
+    if not values:
+        return b""
+    fig, ax = plt.subplots(figsize=(10, 5.2))
+    fig.patch.set_facecolor(BG_MAIN)
+    x = np.arange(len(labels))
+    ax.plot(x, values, color=COLORS[1], linewidth=3, zorder=4)
+    ax.fill_between(x, values, alpha=0.25, color=COLORS[1], zorder=3)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=10, color=TEXT_DARK)
+    if ylabel:
+        ax.set_ylabel(ylabel, fontsize=11, color="#666666")
+    _style_axes(ax, chart_title)
+    plt.tight_layout(pad=1.2)
+    return _to_bytes(fig)
+
+
 def render_chart(chart_spec: Dict) -> bytes:
     """Dispatch to the right chart type from a spec dict."""
     if not chart_spec:
@@ -219,9 +239,23 @@ def render_chart(chart_spec: Dict) -> bytes:
 
     if not labels or not values:
         return b""
+    
+    # Auto-dispatch logic based on data characteristics
+    if ctype == "auto" or not ctype:
+        avg = sum(_parse_values(values)) / len(values) if values else 0
+        if any(keyword in title.lower() for keyword in ["trend", "growth", "over time", "evolution"]):
+            ctype = "line"
+        elif any(keyword in title.lower() for keyword in ["share", "distribution", "breakdown", "portfolio"]):
+            ctype = "pie"
+        else:
+            ctype = "bar"
+
     if ctype == "pie":
         return pie_chart(labels, values, title)
     if ctype == "line":
         return line_chart(labels, values, ylabel, title)
+    if ctype == "area":
+        return area_chart(labels, values, ylabel, title)
+    
     return bar_chart(labels, values, ylabel, title,
                      horizontal=len(labels) > 6)

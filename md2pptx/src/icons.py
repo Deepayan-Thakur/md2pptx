@@ -175,6 +175,37 @@ def lightbulb_icon(size: int = 120, color: Tuple = ORANGE) -> bytes:
     return _to_bytes(img)
 
 
+def scale_icon(size: int = 120, color: Tuple = BLUE) -> bytes:
+    """Expansion/Scaling icon."""
+    img, draw = _new_canvas(size)
+    cx, cy = size // 2, size // 2
+    # Multiple overlapping rectangles growing
+    for i in range(3):
+        s = int(size * (0.3 + i * 0.2))
+        x0, y0 = cx - s // 2, cy - s // 2
+        draw.rectangle([x0, y0, x0 + s, y0 + s], outline=(*color, 200 - i * 50), width=2)
+    # arrow up right
+    draw.line([(cx, cy), (size - 10, 10)], fill=(*color, 255), width=4)
+    draw.polygon([(size - 10, 10), (size - 25, 10), (size - 10, 25)], fill=(*color, 255))
+    return _to_bytes(img)
+
+
+def roi_icon(size: int = 120, color: Tuple = GREEN) -> bytes:
+    """Return on Investment / Dollar growth."""
+    img, draw = _new_canvas(size)
+    cx, cy = size // 2, size // 2
+    # Dollar sign
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(size * 0.6))
+    except:
+        font = ImageFont.load_default()
+    draw.text((cx - size // 4, cy - size // 3), "$", fill=(*color, 255), font=font)
+    # Circular arrow around it
+    draw.arc([10, 10, size - 10, size - 10], start=0, end=270, fill=(*color, 180), width=4)
+    draw.polygon([(size - 10, cy), (size - 25, cy - 10), (size - 25, cy + 10)], fill=(*color, 180))
+    return _to_bytes(img)
+
+
 # Icon registry by keyword
 _ICON_MAP = {
     "ai": lambda: gear_icon(color=BLUE),
@@ -194,6 +225,9 @@ _ICON_MAP = {
     "data": lambda: bar_icon(color=BLUE),
     "chart": lambda: bar_icon(color=RED),
     "acquisition": lambda: arrow_up_icon(color=RED),
+    "roi": lambda: roi_icon(color=GREEN),
+    "scaling": lambda: scale_icon(color=BLUE),
+    "efficiency": lambda: gear_icon(color=ORANGE),
     "conclusion": lambda: circle_icon("✓", GREEN),
 }
 

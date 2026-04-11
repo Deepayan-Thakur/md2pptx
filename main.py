@@ -41,14 +41,16 @@ def _banner():
 def main():
     _banner()
     parser = argparse.ArgumentParser(
-        description="Convert Markdown to Professional PPTX using Gemini AI"
+        description="Convert Markdown to Professional PPTX using OpenRouter AI"
     )
     parser.add_argument("input", help="Path to input .md file")
     parser.add_argument("output", nargs="?", help="Output .pptx path (optional)")
     parser.add_argument("--slides", type=int, default=13,
                         help="Target slide count (10-15, default: 13)")
-    parser.add_argument("--provider", choices=["gemini", "huggingface"], default="huggingface",
-                        help="API provider for slide planning (default: huggingface)")
+    parser.add_argument("--provider", choices=["openrouter", "gemini", "huggingface"], default="openrouter",
+                        help="API provider for slide planning (default: openrouter)")
+    parser.add_argument("--template", default="template.pptx",
+                        help="Base template filename in assets/ (e.g. template1.pptx)")
     args = parser.parse_args()
 
     # ── Validate input ──────────────────────────────────────────────────────
@@ -59,10 +61,20 @@ def main():
     if input_path.suffix.lower() != ".md":
         print(f"ERROR: Input must be a .md file (got: {input_path.suffix})")
         sys.exit(1)
-    if args.provider == "gemini" and not os.getenv("GEMINI_API_KEY"):
+    if args.provider == "openrouter" and not os.getenv("OPENROUTER_API_KEY"):
+        print("WARN: OPENROUTER_API_KEY not set - will use rule-based fallback planner")
+    elif args.provider == "gemini" and not os.getenv("GEMINI_API_KEY"):
         print("WARN: GEMINI_API_KEY not set - will use rule-based fallback planner")
     elif args.provider == "huggingface" and not os.getenv("HUGGINGFACE_API_KEY"):
         print("WARN: HUGGINGFACE_API_KEY not set - will use rule-based fallback planner")
+
+    # ── Check File Size (Constraint: Max 5MB) ───────────────────────────────
+    MAX_SIZE = 5 * 1024 * 1024  # 5 MB
+    file_size = input_path.stat().st_size
+    if file_size > MAX_SIZE:
+        print(f"ERROR: Input file is too large ({file_size / (1024*1024):.1f} MB). "
+              f"Max allowed is 5 MB.")
+        sys.exit(1)
 
     # ── Output path ─────────────────────────────────────────────────────────
     if args.output:
@@ -106,14 +118,28 @@ def main():
             "data_chart": "[CHART ]", "data_table": "[TABLE ]", "conclusion": "[CONCL ]",
             "thankyou": "[THANKS]",
         }.get(sp.get("type", ""), "  ")
-        print(f"   Slide {sp['slide_number']:02d} {icon} [{sp.get('type','?'):<15}] "
-              f"{sp.get('title','')[:50]}")
+        # Sanitize title for terminal output to avoid UnicodeEncodeError on Windows
+        safe_title = sp.get('title', '').encode('utf-8', errors='ignore').decode('utf-8', errors='ignore')[:50]
+        try:
+            print(f"   Slide {sp['slide_number']:02d} {icon} [{sp.get('type','?'):<15}] {safe_title}")
+        except UnicodeEncodeError:
+            # Fallback for environments with restricted encoding
+            print(f"   Slide {sp['slide_number']:02d} {icon} [{sp.get('type','?'):<15}] [Title contains special characters]")
 
     # ── Build PPTX ────────────────────────────────────────────────────────────
     print(f"\nBuilding PPTX...")
     t2 = time.time()
-    generate_pptx(parsed, slide_plan, output_path)
-    print(f"   Built in {time.time() - t2:.1f}s")
+    try:
+        generate_pptx(parsed, slide_plan, output_path, args.template)
+        print(f"   Built in {time.time() - t2:.1f}s")
+    except PermissionError:
+        print(f"\nERROR: Permission Denied while saving to: {output_path}")
+        print("   This usually happens because the file is OPEN in PowerPoint.")
+        print("   Please close the file and try again.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\nERROR during build: {e}")
+        sys.exit(1)
 
     total = time.time() - t0
     print(f"\n{'-'*54}")

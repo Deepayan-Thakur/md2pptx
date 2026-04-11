@@ -62,6 +62,15 @@ python main.py path/to/content.md
 │   └── outputs/         # Generated Presentations
 └── test_cases/          # Sample Markdown Datasets
 ```
+## Setup Instructions
+1. Clone repository
+2. Create virtual environment: `python -m venv .venv`
+3. Activate: `.\.venv\Scripts\Activate.ps1`
+4. Install dependencies: `pip install -r requirements.txt`
+5. Set environment variables (create `.env`):
+   - `OPENROUTER_API_KEY=your_key_here`
+   - `GEMINI_API_KEY=your_key_here`
+6. Run: `python main.py test_cases/example.md`
 
 ## 📄 License
 
